@@ -13,10 +13,10 @@ from torch.autograd import Variable
 import cv2
 from datetime import datetime
 from sklearn.preprocessing import MinMaxScaler
-from notebooks import open3d_ros_helper
+import open3d_ros_helper
 import rospy
 import open3d as o3d
-from rospy_message_converter import message_converter
+# from rospy_message_converter import message_converter
 from sensor_msgs.msg import PointCloud2, PointField, CompressedImage
 
 CMAP = np.load('/home/chihung/multi-task-refinenet/src/cmap_nyud.npy')
@@ -85,11 +85,11 @@ class display_img:
         fps = 1 / sec_per_infer
         print(f"Published ROS semantic topic FPS = {fps}",end="\r")
 
-    def show_receive_fps(self,msg):
-        now_frame =  time.time()
-        frame_per_sec = now_frame - self.previous_frame 
-        print(f"receive FPS = {1/ frame_per_sec}",end="\r")
-        self.previous_frame = now_frame
+    # def show_receive_fps(self,msg):
+    #     now_frame =  time.time()
+    #     frame_per_sec = now_frame - self.previous_frame 
+    #     print(f"receive FPS = {1/ frame_per_sec}",end="\r")
+    #     self.previous_frame = now_frame
         
     @staticmethod
     def image_to_byte_array(image:Image):
