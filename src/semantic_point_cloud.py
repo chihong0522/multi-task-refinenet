@@ -145,7 +145,7 @@ class display_img:
 try:
     img_stream = display_img()
     
-    subscriber = roslibpy.Topic(client, '/camera/aligned_depth_to_color/image_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=100)
+    subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=100)
     subscriber.subscribe(img_stream.receive_image)
 
     sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=100)
