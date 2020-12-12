@@ -12,7 +12,7 @@ from sensor_msgs.msg import CompressedImage
 
 class depth_converter():
     def __init__(self):
-        self.pub = rospy.Publisher("/camera/depth/image_rect_raw/numpy",CompressedImage,queue_size=20)
+        self.pub = rospy.Publisher("/camera/depth/image_rect_raw/numpy",numpy_msg(Floats),queue_size=20)
 
         self.sub = rospy.Subscriber("/camera/depth/image_rect_raw", 
         sensor_msgs.msg.Image,callback=self.convert_depth_image, queue_size=10)
@@ -22,14 +22,10 @@ class depth_converter():
         bridge = CvBridge()
         depth_image = bridge.imgmsg_to_cv2(ros_image, desired_encoding="passthrough")
         depth_array = np.array(depth_image, dtype=np.float32)
-
-        msg = CompressedImage()
-        msg.header = ros_image.header
-        msg.header.frame_id = "converted_depth_frame"
-        msg.format = "jpeg"
-        msg.data = str(depth_array)
-
-        self.pub.publish(msg)
+        
+        img_header = np.array([float(ros_image.header.stamp.secs), float(ros_image.header.stamp.nsecs)],dtype=np.float32)
+        self.pub.publish(img_header)
+        self.pub.publish(depth_array)
 
 
 def main():
