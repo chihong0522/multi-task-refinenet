@@ -19,6 +19,8 @@ import open3d as o3d
 # from rospy_message_converter import message_converter
 from sensor_msgs.msg import PointCloud2, PointField, CompressedImage
 
+from cv_bridge import CvBridge, CvBridgeError
+
 CMAP = np.load('/home/chihung/multi-task-refinenet/src/cmap_nyud.npy')
 DEPTH_COEFF = 5000. # to convert into metres
 HAS_CUDA = torch.cuda.is_available()
@@ -42,10 +44,6 @@ _ = model.eval()
 ckpt = torch.load('/home/chihung/multi-task-refinenet/weights/ExpNYUD_joint.ckpt')
 model.load_state_dict(ckpt['state_dict'])
 
-# Configure logging
-# fmt = '%(asctime)s %(levelname)8s: %(message)s'
-# logging.basicConfig(format=fmt, level=logging.INFO)
-# log = logging.getLogger(__name__)
 
 
 client = roslibpy.Ros(host='localhost', port=9090)
@@ -53,52 +51,51 @@ client.run()
 
 class display_img:
     def __init__(self):
-        self.min_max_scaler = MinMaxScaler()
-        # self.point_cloud_publisher = roslibpy.Topic(client, 
-        #                                             name='/semantic_point_cloud', 
-        #                                             message_type='sensor_msgs/PointCloud2')
         rospy.init_node('semantic_point_cloud', anonymous=True)
+        self.bridge = CvBridge()
         self.pointcloud_pub = rospy.Publisher('semantic_point_cloud', PointCloud2, queue_size=30)
-        self.header_list = {
-            "rgb_image":[],
-            "depth_image":[]
-        }
+        self.img_topic = []
         self.depth_topic = []
 
-    def get_cloest_depth_frame(self,image_frame):
-        image_stamp = image_frame['header']['stamp']
-        # find cloest frame of depth 
-        depth_frames = list(filter(lambda x: x['header']['stamp']['secs']==image_stamp['secs'],self.depth_topic))
-        latency_list = []
-        for frame_index,depth_frame in enumerate(depth_frames):
-            latency = abs(depth_frame['header']['stamp']['nsecs'] - image_stamp['secs'])
-            latency_list.append(
-                {   
-                    "frame_index":frame_index,
-                    "latency":latency
-                    }
-                ) 
-        if len(latency_list)>0:
-            latency_min = min(latency_list,key=lambda x: x['latency'])
-            target_depth_frame = depth_frames[latency_min['frame_index']]
-    
-            target_depth_frame['image_nparray'] = self.ros_jpg_to_nparray(target_depth_frame)
+    def convert_depth_frame(self,depth_frame):
+        depth_image = self.bridge.imgmsg_to_cv2(depth_frame, desired_encoding="passthrough")
+        depth_array = np.array(depth_image, dtype=np.float32)
+        return depth_array
 
-            return target_depth_frame
+    def get_cloest_depth_frame(self,image_frame):
+        # find cloest frame of depth 
+
+        def cal_latency(depth_frame):
+            latency = abs(depth_frame['header']['stamp']['nsecs'] - image_frame['header']['stamp']['nsecs'])
+            depth_frame['latency'] = latency
+            return depth_frame
+
+        depth_frames = [cal_latency(depth_frame) for depth_frame in self.depth_topic \
+            if depth_frame['header']['stamp']['secs'] == image_frame['header']['stamp']['secs'] ]
+
+        if len(depth_frames)>0:
+            target_depth_frame = min(depth_frames,key=lambda x: x['latency'])
+            del target_depth_frame['latency']
+            from collections import namedtuple
+            depth_obj = namedtuple("depth_img", target_depth_frame.keys())(*target_depth_frame.values())
+            return self.convert_depth_frame(depth_obj)
         else:
             return None
 
     def receive_image(self,msg):
-        depth_frame = self.get_cloest_depth_frame(image_frame=msg)
+        self.img_topic.append(msg)
         
-        if not depth_frame:
-            print("Can not find depth frame")
-            return
-
         start_time = time.time()
         try:
+            depth_frame = self.get_cloest_depth_frame(image_frame=msg)
+            
+            if not depth_frame:
+                print("Can not find depth frame")
+                return
+            print('Found matched depth')
+
             image = self.ros_jpg_to_nparray(msg)
-            semantic_frame, pred_depth_frame = self.inference(image)
+            semantic_frame, depth_frame = self.inference(image)
             
             open3d_pcd = self.create_point_cloud(semantic_frame, depth_frame)
             ros_point_cloud = open3d_ros_helper.o3dpc_to_rospc(open3d_pcd,frame_id="semantic_pcd_frame") #ros point cloud msg
@@ -172,22 +169,22 @@ class display_img:
         # pcd.remove_radius_outlier(nb_points=300,radius=100)
         return pcd
     
+    def receive_img(self,msg):
+        self.img_topic.append(msg)
 
     def receive_depth(self,msg):
         # self.header_list['depth_image'].append(msg['header']['stamp'])
-        
         self.depth_topic.append(msg)
-        base64_bytes = msg['data'].encode('ascii')
-        image_bytes = (base64.b64decode(base64_bytes)).decode("utf-8") 
-        depth_np = np.array(image_bytes)
-        print(depth_np)
+
+
+        
 try:
     img_stream = display_img()
 
-    sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw/numpy',"sensor_msgs/CompressedImage",throttle_rate=50)
+    sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw',"sensor_msgs/Image")
     sub_2.subscribe(img_stream.receive_depth)
     
-    subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=80)
+    subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage")
     subscriber.subscribe(img_stream.receive_image)
 
     
