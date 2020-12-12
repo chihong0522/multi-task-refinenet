@@ -177,10 +177,14 @@ class display_img:
         # self.header_list['depth_image'].append(msg['header']['stamp'])
         
         self.depth_topic.append(msg)
+        base64_bytes = msg['data'].encode('ascii')
+        image_bytes = (base64.b64decode(base64_bytes)).decode("utf-8") 
+        depth_np = np.array(image_bytes)
+        print(depth_np)
 try:
     img_stream = display_img()
 
-    sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=50)
+    sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw/numpy',"sensor_msgs/CompressedImage",throttle_rate=50)
     sub_2.subscribe(img_stream.receive_depth)
     
     subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=80)
