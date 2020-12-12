@@ -18,6 +18,7 @@ import rospy
 import open3d as o3d
 # from rospy_message_converter import message_converter
 from sensor_msgs.msg import PointCloud2, PointField, CompressedImage
+import sensor_msgs.msg
 
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -46,39 +47,39 @@ model.load_state_dict(ckpt['state_dict'])
 
 
 
-client = roslibpy.Ros(host='localhost', port=9090)
-client.run()
+# client = roslibpy.Ros(host='localhost', port=9090)
+# client.run() 
+
 
 class display_img:
     def __init__(self):
+        self.cv_bridge = CvBridge()
         rospy.init_node('semantic_point_cloud', anonymous=True)
-        self.bridge = CvBridge()
         self.pointcloud_pub = rospy.Publisher('semantic_point_cloud', PointCloud2, queue_size=30)
         self.img_topic = []
         self.depth_topic = []
 
-    def convert_depth_frame(self,depth_frame):
-        depth_image = self.bridge.imgmsg_to_cv2(depth_frame, desired_encoding="passthrough")
+    def convert_depth_frame(self,depth_frame:sensor_msgs.msg.Image):
+        depth_image = self.cv_bridge.imgmsg_to_cv2(depth_frame, desired_encoding="passthrough")
         depth_array = np.array(depth_image, dtype=np.float32)
         return depth_array
 
     def get_cloest_depth_frame(self,image_frame):
         # find cloest frame of depth 
-
-        def cal_latency(depth_frame):
-            latency = abs(depth_frame['header']['stamp']['nsecs'] - image_frame['header']['stamp']['nsecs'])
-            depth_frame['latency'] = latency
-            return depth_frame
+        min_latency_frame = {
+            "depth":None,
+            "latency":None
+        }
+        def cal_latency(depth_frame:sensor_msgs.msg.Image):
+            latency = abs(depth_frame.header.stamp.nsecs - image_frame.header.stamp.nsecs)
+            if not min_latency_frame['latency'] or latency < min_latency_frame['latency']:
+                min_latency_frame['depth'] = depth_frame
 
         depth_frames = [cal_latency(depth_frame) for depth_frame in self.depth_topic \
-            if depth_frame['header']['stamp']['secs'] == image_frame['header']['stamp']['secs'] ]
+            if depth_frame.header.stamp.secs == image_frame.header.stamp.secs ]
 
-        if len(depth_frames)>0:
-            target_depth_frame = min(depth_frames,key=lambda x: x['latency'])
-            del target_depth_frame['latency']
-            from collections import namedtuple
-            depth_obj = namedtuple("depth_img", target_depth_frame.keys())(*target_depth_frame.values())
-            return self.convert_depth_frame(depth_obj)
+        if min_latency_frame['depth']:
+            return self.convert_depth_frame(min_latency_frame['depth'])
         else:
             return None
 
@@ -177,23 +178,39 @@ class display_img:
         self.depth_topic.append(msg)
 
 
-        
-try:
+def main():
+# try:
     img_stream = display_img()
 
-    sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw',"sensor_msgs/Image")
-    sub_2.subscribe(img_stream.receive_depth)
+    # sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw',"sensor_msgs/Image")
+    # sub_2.subscribe(img_stream.receive_depth)
+
+    sub_2 = rospy.Subscriber("/camera/depth/image_rect_raw", 
+        sensor_msgs.msg.Image,callback=img_stream.receive_depth, queue_size=100)
+
+    sub_1 = rospy.Subscriber("/camera/color/image_raw/compressed", 
+        sensor_msgs.msg.CompressedImage,callback=img_stream.receive_image, queue_size=100)
+
+    # rospy.init_node('depth_converter', anonymous=True)
+    try:
+        rospy.spin()
+    except KeyboardInterrupt:
+        print ("Shutting down ROS subcribers")
     
-    subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage")
-    subscriber.subscribe(img_stream.receive_image)
+    
+    # subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage")
+    # subscriber.subscribe(img_stream.receive_image)
 
     
 
-    time.sleep(10000)
+    # time.sleep(10000)
     
-except Exception as e:
-    print(e)
-    client.terminate()
+# except Exception as e:
+#     print(e)
+#     client.terminate()
 
-finally:
-    client.terminate()
+# finally:
+#     client.terminate()
+
+if __name__=="__main__":
+    main()
