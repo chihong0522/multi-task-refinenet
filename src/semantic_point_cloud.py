@@ -1,7 +1,7 @@
 import base64
 import logging
 import time
-import roslibpy
+# import roslibpy
 import numpy as np
 from PIL import Image
 import io
@@ -45,12 +45,6 @@ _ = model.eval()
 ckpt = torch.load('/home/chihung/multi-task-refinenet/weights/ExpNYUD_joint.ckpt')
 model.load_state_dict(ckpt['state_dict'])
 
-
-
-# client = roslibpy.Ros(host='localhost', port=9090)
-# client.run() 
-
-
 class display_img:
     def __init__(self):
         self.cv_bridge = CvBridge()
@@ -84,6 +78,8 @@ class display_img:
             if depth_frame.header.stamp.secs == image_frame.header.stamp.secs ]
 
         if min_latency_frame['depth']:
+            self.depth_topic = [x for x in self.depth_topic \
+                if x.header.stamp.secs >= image_frame.header.stamp.secs ]
             return self.convert_depth_frame(min_latency_frame['depth'])
         else:
             return None
@@ -96,7 +92,7 @@ class display_img:
             rs_depth_frame = self.get_cloest_depth_frame(image_frame=msg)
             
             if not isinstance(rs_depth_frame,np.ndarray):
-                print("Can not find depth frame")
+                print("Can not find depth frame                               ")
                 return
             # print('Found matched depth')
 
@@ -113,12 +109,6 @@ class display_img:
         sec_per_infer = end_time - start_time
         fps = 1 / sec_per_infer
         print(f"Published ROS semantic topic FPS = {fps}",end="\r")
-
-    # def show_receive_fps(self,msg):
-    #     now_frame =  time.time()
-    #     frame_per_sec = now_frame - self.previous_frame 
-    #     print(f"receive FPS = {1/ frame_per_sec}",end="\r")
-    #     self.previous_frame = now_frame
         
     @staticmethod
     def image_to_byte_array(image:Image):
@@ -179,16 +169,12 @@ class display_img:
         self.img_topic.append(msg)
 
     def receive_depth(self,msg):
-        # self.header_list['depth_image'].append(msg['header']['stamp'])
         self.depth_topic.append(msg)
 
 
 def main():
 # try:
     img_stream = display_img()
-
-    # sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw',"sensor_msgs/Image")
-    # sub_2.subscribe(img_stream.receive_depth)
 
     sub_2 = rospy.Subscriber("/camera/depth/image_rect_raw", 
         sensor_msgs.msg.Image,callback=img_stream.receive_depth, queue_size=100)
@@ -202,20 +188,6 @@ def main():
     except KeyboardInterrupt:
         print ("Shutting down ROS subcribers")
     
-    
-    # subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage")
-    # subscriber.subscribe(img_stream.receive_image)
-
-    
-
-    # time.sleep(10000)
-    
-# except Exception as e:
-#     print(e)
-#     client.terminate()
-
-# finally:
-#     client.terminate()
 
 if __name__=="__main__":
     main()
