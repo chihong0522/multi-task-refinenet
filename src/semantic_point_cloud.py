@@ -58,27 +58,53 @@ class display_img:
         #                                             name='/semantic_point_cloud', 
         #                                             message_type='sensor_msgs/PointCloud2')
         rospy.init_node('semantic_point_cloud', anonymous=True)
-        self.pointcloud_pub = rospy.Publisher('semantic_point_cloud', PointCloud2, queue_size=20)
+        self.pointcloud_pub = rospy.Publisher('semantic_point_cloud', PointCloud2, queue_size=30)
         self.header_list = {
             "rgb_image":[],
             "depth_image":[]
         }
+        self.depth_topic = []
+
+    def get_cloest_depth_frame(self,image_frame):
+        image_stamp = image_frame['header']['stamp']
+        # find cloest frame of depth 
+        depth_frames = list(filter(lambda x: x['header']['stamp']['secs']==image_stamp['secs'],self.depth_topic))
+        latency_list = []
+        for frame_index,depth_frame in enumerate(depth_frames):
+            latency = abs(depth_frame['header']['stamp']['nsecs'] - image_stamp['secs'])
+            latency_list.append(
+                {   
+                    "frame_index":frame_index,
+                    "latency":latency
+                    }
+                ) 
+        if len(latency_list)>0:
+            latency_min = min(latency_list,key=lambda x: x['latency'])
+            target_depth_frame = depth_frames[latency_min['frame_index']]
+    
+            target_depth_frame['image_nparray'] = self.ros_jpg_to_nparray(target_depth_frame)
+
+            return target_depth_frame
+        else:
+            return None
 
     def receive_image(self,msg):
-        self.header_list['rgb_image'].append(msg['header']['stamp'])
-        start_time = time.time()
+        depth_frame = self.get_cloest_depth_frame(image_frame=msg)
+        
+        if not depth_frame:
+            print("Can not find depth frame")
+            return
 
-        base64_bytes = msg['data'].encode('ascii')
-        image_bytes = base64.b64decode(base64_bytes)
-        # self.opt_raw_image.value = image_bytes
-    
-        image = np.array(Image.open(io.BytesIO(image_bytes)))
-        
-        semantic_frame, depth_frame = self.inference(image)
-        
-        open3d_pcd = self.create_point_cloud(semantic_frame, depth_frame)
-        ros_point_cloud = open3d_ros_helper.o3dpc_to_rospc(open3d_pcd,frame_id="semantic_pcd_frame") #ros point cloud msg
-        self.pointcloud_pub.publish(ros_point_cloud)
+        start_time = time.time()
+        try:
+            image = self.ros_jpg_to_nparray(msg)
+            semantic_frame, pred_depth_frame = self.inference(image)
+            
+            open3d_pcd = self.create_point_cloud(semantic_frame, depth_frame)
+            ros_point_cloud = open3d_ros_helper.o3dpc_to_rospc(open3d_pcd,frame_id="semantic_pcd_frame") #ros point cloud msg
+            self.pointcloud_pub.publish(ros_point_cloud)
+        except Exception as e:
+            print(e)
 
         end_time = time.time()
         sec_per_infer = end_time - start_time
@@ -96,9 +122,17 @@ class display_img:
         imgByteArr = io.BytesIO()
         image.save(imgByteArr, format="jpeg")
         return imgByteArr.getvalue()
+
+    @staticmethod
+    def ros_jpg_to_nparray(msg):
+        base64_bytes = msg['data'].encode('ascii')
+        image_bytes = base64.b64decode(base64_bytes)
+        image = np.array(Image.open(io.BytesIO(image_bytes)))
+        return image
         
     def inference(self,img):
         start_time = time.time()
+        
         with torch.no_grad():
             img_var = Variable(torch.from_numpy(prepare_img(img).transpose(2, 0, 1)[None]), requires_grad=False).float()
             if HAS_CUDA:
@@ -140,16 +174,19 @@ class display_img:
     
 
     def receive_depth(self,msg):
-        self.header_list['depth_image'].append(msg['header']['stamp'])
-    
+        # self.header_list['depth_image'].append(msg['header']['stamp'])
+        
+        self.depth_topic.append(msg)
 try:
     img_stream = display_img()
+
+    sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=50)
+    sub_2.subscribe(img_stream.receive_depth)
     
-    subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=100)
+    subscriber = roslibpy.Topic(client, '/camera/color/image_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=80)
     subscriber.subscribe(img_stream.receive_image)
 
-    sub_2 = roslibpy.Topic(client, '/camera/depth/image_rect_raw/compressed',"sensor_msgs/CompressedImage",throttle_rate=100)
-    sub_2.subscribe(img_stream.receive_depth)
+    
 
     time.sleep(10000)
     
