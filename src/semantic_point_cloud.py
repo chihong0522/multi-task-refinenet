@@ -59,7 +59,7 @@ class display_img:
         return depth_array/1000
 
     def convert_image_frame(self,image_frame:sensor_msgs.msg.Image):
-        rgb_image = self.cv_bridge.compressed_imgmsg_to_cv2(image_frame, desired_encoding="passthrough")
+        rgb_image = self.cv_bridge.imgmsg_to_cv2(image_frame, desired_encoding="passthrough")
         img_np_array = np.array(rgb_image, dtype=np.uint8)
         return img_np_array
 
@@ -184,8 +184,8 @@ def main():
     sub_2 = rospy.Subscriber("/camera/depth/image_rect_raw", 
         sensor_msgs.msg.Image,callback=img_stream.receive_depth, queue_size=100)
 
-    sub_1 = rospy.Subscriber("/camera/color/image_raw/compressed", 
-        sensor_msgs.msg.CompressedImage,callback=img_stream.receive_image, queue_size=100)
+    sub_1 = rospy.Subscriber("/camera/color/image_raw", 
+        sensor_msgs.msg.Image,callback=img_stream.receive_image, queue_size=100)
 
     # rospy.init_node('depth_converter', anonymous=True)
     try:
