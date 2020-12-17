@@ -54,12 +54,12 @@ class display_img:
         self.depth_topic = []
 
     def convert_depth_frame(self,depth_frame:sensor_msgs.msg.Image):
-        depth_image = self.cv_bridge.imgmsg_to_cv2(depth_frame, desired_encoding="passthrough")
+        depth_image = self.cv_bridge.imgmsg_to_cv2(depth_frame,desired_encoding="passthrough")
         depth_array = np.array(depth_image, dtype=np.float32)
         return depth_array/1000
 
     def convert_image_frame(self,image_frame:sensor_msgs.msg.Image):
-        rgb_image = self.cv_bridge.imgmsg_to_cv2(image_frame, desired_encoding="passthrough")
+        rgb_image = self.cv_bridge.compressed_imgmsg_to_cv2(image_frame, desired_encoding="passthrough")
         img_np_array = np.array(rgb_image, dtype=np.uint8)
         return img_np_array
 
@@ -69,7 +69,7 @@ class display_img:
             "depth":None,
             "latency":None
         }
-        def cal_latency(depth_frame:sensor_msgs.msg.Image):
+        def cal_latency(depth_frame):
             latency = abs(depth_frame.header.stamp.nsecs - image_frame.header.stamp.nsecs)
             if not min_latency_frame['latency'] or latency < min_latency_frame['latency']:
                 min_latency_frame['depth'] = depth_frame
@@ -90,16 +90,15 @@ class display_img:
         start_time = time.time()
         try:
             rs_depth_frame = self.get_cloest_depth_frame(image_frame=msg)
+            depth_frame = rs_depth_frame
             
-            if not isinstance(rs_depth_frame,np.ndarray):
-                print("Can not find depth frame                               ")
+            if not isinstance(depth_frame,np.ndarray):
                 return
-            # print('Found matched depth')
-
+            
             image = self.convert_image_frame(msg)
             semantic_frame, pred_depth_frame = self.inference(image)
             
-            open3d_pcd = self.create_point_cloud(semantic_frame, rs_depth_frame)
+            open3d_pcd = self.create_point_cloud(semantic_frame, depth_frame)
             ros_point_cloud = open3d_ros_helper.o3dpc_to_rospc(open3d_pcd,frame_id="semantic_pcd_frame") #ros point cloud msg
             self.pointcloud_pub.publish(ros_point_cloud)
         except Exception as e:
@@ -117,7 +116,7 @@ class display_img:
         return imgByteArr.getvalue()
 
     @staticmethod
-    def ros_jpg_to_nparray(msg):
+    def ros_jpg_to_nparray(msg:CompressedImage):
         base64_bytes = str(msg.data).encode('ascii')
         image_bytes = base64.b64decode(base64_bytes)
         image = np.array(Image.open(io.BytesIO(image_bytes)))
@@ -170,7 +169,13 @@ class display_img:
 
     def receive_depth(self,msg):
         self.depth_topic.append(msg)
-
+        # if self.previous_frame:
+        #     t = time.time()
+        #     interval = t- self.previous_frame
+        #     print(f"Depth msg at {1/interval} FPS",end="\r")
+        #     self.previous_frame = t
+        # else:
+        #     self.previous_frame = time.time()
 
 def main():
 # try:
@@ -179,8 +184,8 @@ def main():
     sub_2 = rospy.Subscriber("/camera/depth/image_rect_raw", 
         sensor_msgs.msg.Image,callback=img_stream.receive_depth, queue_size=100)
 
-    sub_1 = rospy.Subscriber("/camera/color/image_raw", 
-        sensor_msgs.msg.Image,callback=img_stream.receive_image, queue_size=100)
+    sub_1 = rospy.Subscriber("/camera/color/image_raw/compressed", 
+        sensor_msgs.msg.CompressedImage,callback=img_stream.receive_image, queue_size=100)
 
     # rospy.init_node('depth_converter', anonymous=True)
     try:
