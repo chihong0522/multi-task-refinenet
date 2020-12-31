@@ -25,7 +25,7 @@ import sensor_msgs.msg
 
 from cv_bridge import CvBridge, CvBridgeError
 
-CMAP = np.load('./cmap_nyud.npy')
+CMAP = np.load('/home/nvidia/multi-task-refinenet/src/cmap_nyud.npy')
 DEPTH_COEFF = 5000. # to convert into metres
 HAS_CUDA = torch.cuda.is_available()
 # HAS_CUDA = None
@@ -45,7 +45,7 @@ if HAS_CUDA:
     _ = model.cuda()
 _ = model.eval()
 
-ckpt = torch.load('../weights/ExpNYUD_joint.ckpt')
+ckpt = torch.load('/home/nvidia/multi-task-refinenet/weights/ExpNYUD_joint.ckpt')
 model.load_state_dict(ckpt['state_dict'])
 
 class display_img:
@@ -53,7 +53,7 @@ class display_img:
         self.cv_bridge = CvBridge()
         rospy.init_node('semantic_point_cloud', anonymous=True)
         # self.pointcloud_pub = rospy.Publisher('semantic_point_cloud', PointCloud2, queue_size=30)
-        self.semantic_img = rospy.Publisher('semantic_image', sensor_msgs.msg.Image, queue_size=50)
+        self.semantic_img = rospy.Publisher('semantic_image/compressed', sensor_msgs.msg.CompressedImage, queue_size=50)
         self.img_topic = []
         self.depth_topic = []
 
@@ -92,23 +92,24 @@ class display_img:
         # self.img_topic.append(msg)
         
         start_time = time.time()
+
+        # rs_depth_frame = self.get_cloest_depth_frame(image_frame=msg)
+        # depth_frame = rs_depth_frame
+        
+        # if not isinstance(depth_frame,np.ndarray):
+        #     return
         try:
-            # rs_depth_frame = self.get_cloest_depth_frame(image_frame=msg)
-            # depth_frame = rs_depth_frame
-            
-            # if not isinstance(depth_frame,np.ndarray):
-            #     return
-            
             image = self.convert_image_frame(msg)
             semantic_frame, pred_depth_frame = self.inference(image)
-            ros_semantic_img = self.cv_bridge.cv2_to_imgmsg(semantic_frame)
+            ros_semantic_img = self.cv_bridge.cv2_to_compressed_imgmsg(semantic_frame)
             self.semantic_img.publish(ros_semantic_img)
-            
-            # open3d_pcd = self.create_point_cloud(semantic_frame, pred_depth_frame)
-            # ros_point_cloud = open3d_ros_helper.o3dpc_to_rospc(open3d_pcd,frame_id="semantic_pcd_frame") #ros point cloud msg
-            # self.pointcloud_pub.publish(ros_point_cloud)
+        
+        # open3d_pcd = self.create_point_cloud(semantic_frame, pred_depth_frame)
+        # ros_point_cloud = open3d_ros_helper.o3dpc_to_rospc(open3d_pcd,frame_id="semantic_pcd_frame") #ros point cloud msg
+        # self.pointcloud_pub.publish(ros_point_cloud)
         except Exception as e:
             print(e)
+
 
         end_time = time.time()
         sec_per_infer = end_time - start_time
@@ -176,8 +177,8 @@ def main():
 # try:
     img_stream = display_img()
 
-    sub_2 = rospy.Subscriber("/camera/depth/image_rect_raw", 
-        sensor_msgs.msg.Image,callback=img_stream.receive_depth, queue_size=100)
+    # sub_2 = rospy.Subscriber("/camera/depth/image_rect_raw", 
+    #     sensor_msgs.msg.Image,callback=img_stream.receive_depth, queue_size=100)
 
     sub_1 = rospy.Subscriber("/camera/color/image_raw/compressed", 
         sensor_msgs.msg.CompressedImage,callback=img_stream.receive_image, queue_size=100)
