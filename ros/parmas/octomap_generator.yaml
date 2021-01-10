@@ -1,6 +1,6 @@
 octomap:
     pointcloud_topic: "/semantic_pcl/semantic_pcl"
-    tree_type: 1
+    tree_type: 2
     world_frame_id: "/map"
     resolution: 0.02
     max_range: 10.0
