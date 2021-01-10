@@ -1,3 +1,6 @@
+import sys
+sys.path.remove('/opt/ros/melodic/lib/python2.7/dist-packages')
+sys.path.append('/opt/ros/melodic/lib/python2.7/dist-packages')
 import base64
 import logging
 import time
@@ -12,7 +15,6 @@ import torch, torchvision
 from torch.autograd import Variable
 import cv2
 from datetime import datetime
-from sklearn.preprocessing import MinMaxScaler
 import open3d_ros_helper
 import rospy
 import open3d as o3d
@@ -49,7 +51,7 @@ class display_img:
     def __init__(self):
         self.cv_bridge = CvBridge()
         rospy.init_node('semantic_point_cloud', anonymous=True)
-        self.pointcloud_pub = rospy.Publisher('semantic_point_cloud', PointCloud2, queue_size=30)
+        self.pointcloud_pub = rospy.Publisher('semantic_point_cloud', PointCloud2, queue_size=100)
         self.img_topic = []
         self.depth_topic = []
 
@@ -181,7 +183,7 @@ def main():
 # try:
     img_stream = display_img()
 
-    sub_2 = rospy.Subscriber("/camera/depth/image_rect_raw", 
+    sub_2 = rospy.Subscriber("/camera/aligned_depth_to_color/image_raw", 
         sensor_msgs.msg.Image,callback=img_stream.receive_depth, queue_size=100)
 
     sub_1 = rospy.Subscriber("/camera/color/image_raw", 
