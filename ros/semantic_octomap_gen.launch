@@ -3,5 +3,5 @@
     <node pkg="octomap_generator" type="octomap_generator" name="octomap_generator" output="screen"/>
 
     <node pkg="tf" type="static_transform_publisher" name="semantic_pcd_tf" 
-    args="0 0 0 1 0 0 0 camera_link semantic_pcd_frame 10" />
+    args="0 0 0 -1 1 -1 1 camera_link semantic_pcd_frame 10" />
 </launch>
